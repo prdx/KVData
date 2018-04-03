@@ -41,7 +41,13 @@ func handle_set(r *http.Request, contents []uint8) {
   var d []Data
   switch r.Method {
   case "POST":
-    json.Unmarshal(contents, &d)
+    err := json.Unmarshal(contents, &d)
+    if err != nil {
+      fmt.Println("Error when extracting json")
+      fmt.Println(err)
+      os.Exit(1)
+    }
+    fmt.Println(d)
   }
 }
 
