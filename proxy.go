@@ -5,10 +5,12 @@ import (
   "fmt"
   "os"
   "io/ioutil"
+  "math/rand"
   "net/http"
   "log"
   _ "./status"
   "strings"
+  "time"
 )
 
 var (
@@ -25,6 +27,9 @@ type KVData struct {
   Value `json:"value"`
 }
 
+// To maintain where each value is stored in each server
+var addressBook map[string]string
+
 func request_handler(w http.ResponseWriter, r *http.Request) {
   w.Header().Set("Access-Control-Allow-Origin", "*")
   w.Header().Set("Access-Control-Allow-Headers", "X-Requested-With")
@@ -38,21 +43,55 @@ func request_handler(w http.ResponseWriter, r *http.Request) {
 }
 
 func handle_set(r *http.Request, contents []uint8) {
-  var d []KVData
   switch r.Method {
   case "POST":
-    err := json.Unmarshal(contents, &d)
-    if err != nil {
-      fmt.Println("Error when extracting json")
-      fmt.Println(err)
-      os.Exit(1)
-    }
-    fmt.Println(d)
+    json_to_object(contents)
   }
 }
 
-func handle_get(r *http.Request) {
+func json_to_object(contents []uint8) (map[int][]KVData) {
+  var d []KVData
+  err := json.Unmarshal(contents, &d)
+  if err != nil {
+    fmt.Println("Error when extracting json")
+    fmt.Println(err)
+    os.Exit(1)
+  }
+
+  // Get number of servers
+  n_server := len(ips)
+  fmt.Println(n_server)
+
+  // Prepare the seed
+  rand.Seed(time.Now().Unix())
+
+  // Init the destinations
+  destinations := make(map[int][]KVData)
+
+  for _, el := range d {
+    temp := KVData{
+      Key: el.Key,
+      Value: Value{
+        Encoding: el.Value.Encoding,
+        Data: el.Value.Data,
+      },
+    }
+    // Assign data to server randomly
+    // Random is one of the method for load balancing
+    idx := rand.Int() % n_server
+    destinations[idx] = append(destinations[idx], temp)
+  }
+  return destinations
 }
+
+func is_duplicate(key string) bool {
+  if _, ok := addressBook[key]; ok {
+    return true
+  }
+  return false
+}
+
+func handle_get(r *http.Request) {}
 
 func build_addresses(servers []string) ([]string, []string) {
   ips := make([]string, len(servers))
