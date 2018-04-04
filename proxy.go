@@ -20,9 +20,9 @@ type Value struct {
   Data string `json:"data"`
 }
 
-type Data struct {
+type KVData struct {
   Key string `json:"key"`
-  Value `json:value`
+  Value `json:"value"`
 }
 
 func request_handler(w http.ResponseWriter, r *http.Request) {
@@ -38,7 +38,7 @@ func request_handler(w http.ResponseWriter, r *http.Request) {
 }
 
 func handle_set(r *http.Request, contents []uint8) {
-  var d []Data
+  var d []KVData
   switch r.Method {
   case "POST":
     err := json.Unmarshal(contents, &d)
