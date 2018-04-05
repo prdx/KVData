@@ -1,6 +1,7 @@
 package main
 
 import (
+  "bytes"
   "encoding/json"
   "fmt"
   "os"
@@ -10,6 +11,7 @@ import (
   "log"
   _ "./status"
   "strings"
+  "sync"
   "time"
 )
 
@@ -43,9 +45,49 @@ func request_handler(w http.ResponseWriter, r *http.Request) {
 }
 
 func handle_set(r *http.Request, contents []uint8) {
+  // Get number of servers
+  n_server := len(ips)
+
   switch r.Method {
   case "POST":
-    json_to_object(contents)
+    destinations := json_to_object(contents)
+    i := 0
+    var wg sync.WaitGroup
+    wg.Add(len(destinations))
+    respChan := make(chan *http.Response)
+    resps := make([]*http.Response, 0)
+    for i < n_server {
+      if val, ok := destinations[i]; ok {
+        json_obj, _ := json.Marshal(val)
+        url := strings.Join([]string{"http://", ips[i], ":", ports[i], r.URL.Path}, "")
+        response, err := http.NewRequest("POST", url, bytes.NewBuffer(json_obj))
+        if err != nil {
+          os.Exit(2)
+        } else {
+          go func(response *http.Request) {
+            defer response.Body.Close()
+            defer wg.Done()
+            response.Header.Set("Content-Type", "application/json")
+            client := &http.Client{}
+            resp_received, err := client.Do(response)
+            if err != nil {
+              panic(err)
+            } else {
+              respChan <- resp_received
+            }
+            time.Sleep(time.Second * 2)
+          }(response)
+        }
+      }
+      i++
+    }
+    go func() {
+      for response := range respChan {
+        resps = append(resps, response)
+      }
+    }()
+    wg.Wait()
+    fmt.Println(resps)
   }
 }
 
@@ -60,7 +102,6 @@ func json_to_object(contents []uint8) (map[int][]KVData) {
 
   // Get number of servers
   n_server := len(ips)
-  fmt.Println(n_server)
 
   // Prepare the seed
   rand.Seed(time.Now().Unix())
