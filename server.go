@@ -33,19 +33,32 @@ type KVData struct {
   Value `json:"value"`
 }
 
-var data map[string]interface{}
+var dataStore = map[string]Value{}
 
 func handle_set(r *http.Request, contents []uint8) {
-  var d []KVData
   switch r.Method {
   case "POST":
-    err := json.Unmarshal(contents, &d)
-    if err != nil {
-      fmt.Println("Error when extracting json")
-      fmt.Println(err)
-      os.Exit(1)
-    }
-    fmt.Println(d)
+    d := json_to_object_post(contents)
+    save(d)
+    fmt.Println(dataStore)
+  }
+}
+
+func json_to_object_post(contents []uint8) ([]KVData) {
+  var d []KVData
+  
+  err := json.Unmarshal(contents, &d)
+  if err != nil {
+    fmt.Println("Error when extracting json")
+    fmt.Println(err)
+    os.Exit(1)
+  }
+  return d
+}
+
+func save(d []KVData) {
+  for _, el := range d {
+    dataStore[el.Key] = el.Value
   }
 }
 
