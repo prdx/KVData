@@ -17,9 +17,9 @@ func request_handler(w http.ResponseWriter, r *http.Request) {
   contents, _ := ioutil.ReadAll(r.Body)
   switch r.URL.Path {
   case "/set":
-    handle_set(r, contents)
+    handle_set(w, r, contents)
   case "/get":
-    fmt.Println("/get")
+    handle_get(w, r, contents)
   }
 }
 
@@ -35,12 +35,26 @@ type KVData struct {
 
 var dataStore = map[string]Value{}
 
-func handle_set(r *http.Request, contents []uint8) {
+func handle_set(w http.ResponseWriter, r *http.Request, contents []uint8) {
   switch r.Method {
   case "POST":
     d := json_to_object_post(contents)
     save(d)
     fmt.Println(dataStore)
+  }
+}
+
+func handle_get(w http.ResponseWriter, r *http.Request, contents []uint8) {
+  switch r.Method {
+  case "GET":
+    js, err := json.Marshal(dataStore)
+    if err != nil {
+      http.Error(w, err.Error(), http.StatusInternalServerError)
+      return
+    }
+
+    w.Header().Set("Content-Type", "application/json")
+    w.Write(js)
   }
 }
 

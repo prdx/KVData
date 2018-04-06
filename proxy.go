@@ -33,6 +33,16 @@ type Query struct {
   Key string `json:"key"`
 }
 
+type ResponseItem struct {
+  Key string `json:"key"`
+  Encoding string `json:"encoding"`
+}
+
+type Response struct {
+  Status int
+  Items []ResponseItem `json:items`
+}
+
 // To maintain where each value is stored in each server
 var addressBook = map[string]string{}
 
@@ -43,13 +53,48 @@ func request_handler(w http.ResponseWriter, r *http.Request) {
   switch r.URL.Path {
   case "/set":
     handle_set(r, contents)
-    fmt.Println(addressBook)
   case "/get":
-    //handle_get(r, contents)
+    handle_get(r, contents)
   }
 }
 
 func handle_get(r *http.Request, contents []uint8) {
+  switch r.Method {
+  case "GET":
+    i := 0
+    var wg sync.WaitGroup 
+    resps := make([]*http.Response, 0)
+    respChan := make(chan *http.Response)
+    wg.Add(len(ips))
+    for i < len(ips) {
+      url := strings.Join([]string{"http://", string(ips[i]), ":", string(ports[i]), r.URL.Path}, "")
+      response, err := http.NewRequest("GET", url, nil)
+      if err != nil {
+        os.Exit(2)
+      } else {
+        go func(response *http.Request) {
+          defer wg.Done()
+          response.Header.Set("Content-Type", "application/json")
+          client := &http.Client{}
+          resp_received, err := client.Do(response)
+          if err != nil {
+            panic(err)
+          } else {
+            respChan <- resp_received
+          }
+          time.Sleep(time.Second * 2)
+        }(response)
+      }
+      i++
+    }
+    go func() {
+      for response := range respChan {
+        resps = append(resps, response)
+      }
+    }()
+    wg.Wait()
+    fmt.Println(resps)
+  }
 }
 
 func handle_set(r *http.Request, contents []uint8) {
@@ -88,7 +133,6 @@ func handle_set(r *http.Request, contents []uint8) {
         for _, d := range destination {
           addressBook[d.Key] = ips[i] + ":" + ports[i]
         }
-        //addressBook[destination = ips[i] + ":" + ports[i]
       }
     }
 
@@ -143,6 +187,8 @@ func is_duplicate(key string) bool {
   return false
 }
 
+//func format_response(response []*http.Response) (byte[], int) {
+//}
 
 func build_addresses(servers []string) ([]string, []string) {
   ips := make([]string, len(servers))
