@@ -3,6 +3,7 @@ package main
 import (
   "encoding/json"
   "fmt"
+  "flag"
   "io/ioutil"
   "net/http"
   "os"
@@ -60,7 +61,6 @@ func handle_get(w http.ResponseWriter, r *http.Request, contents []uint8) {
 
 func json_to_object_post(contents []uint8) ([]KVData) {
   var d []KVData
-  
   err := json.Unmarshal(contents, &d)
   if err != nil {
     fmt.Println("Error when extracting json")
@@ -77,10 +77,13 @@ func save(d []KVData) {
 }
 
 func main() {
+  ip := flag.String("ip", "127.0.0.1", "IP address")
+  port := flag.String("port", "9191", "Port")
+  flag.Parse()
   http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
     request_handler(w, r)
   })
 
-  fmt.Println("Starting server...")
-  log.Fatal(http.ListenAndServe(":8181", nil))
+  fmt.Println("Starting server at " + *ip + ":" + *port)
+  log.Fatal(http.ListenAndServe(*ip + ":" + *port, nil))
 }
