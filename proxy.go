@@ -123,7 +123,7 @@ func handle_set_post(r *http.Request, contents []uint8) {
 
 func handle_set_put(r *http.Request, contents []uint8) {
   d := build_kvdata_array(contents)
-  _, destinations := build_destination_list(d, "POST")
+  _, destinations := build_destination_list(d, "PUT")
 
   var wg sync.WaitGroup
   wg.Add(len(destinations))
@@ -133,7 +133,7 @@ func handle_set_put(r *http.Request, contents []uint8) {
   for address, data := range destinations {
     json_obj, _ := json.Marshal(data)
     url := strings.Join([]string{"http://", address, r.URL.Path}, "")
-    response, err := http.NewRequest("POST", url, bytes.NewBuffer(json_obj))
+    response, err := http.NewRequest("PUT", url, bytes.NewBuffer(json_obj))
     if err != nil {
       os.Exit(2)
     } else {
@@ -282,22 +282,27 @@ func build_destination_list(d []KVData, mode string) (int, map[string][]KVData) 
         Data: el.Value.Data,
       },
     }
-    // Assign data to server randomly
-    // Random is one of the method for load balancing
+
     if mode == "POST" {
+      // Assign data to server randomly
+      // Random is one of the method for load balancing
       idx := rand.Int() % n_server
       address = ips[idx] + ":" + ports[idx]
     } else {
-      // TODO: Should check if it has the key already, if doesn't
-      // update code to 206
-      address = addressBook[el.Key]
+      // Check if it has the key already, if doesn't update code to 206
+      if key_exists(el.Key) {
+        address = addressBook[el.Key]
+      } else {
+        status_code = status.PARTIAL_SUCCESS
+        continue
+      }
     }
     destinations[address] = append(destinations[address], temp)
   }
   return status_code, destinations
 }
 
-func is_duplicate(key string) bool {
+func key_exists(key string) bool {
   if _, ok := addressBook[key]; ok {
     return true
   }
