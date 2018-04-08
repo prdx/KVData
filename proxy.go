@@ -122,7 +122,48 @@ func handle_set_post(r *http.Request, contents []uint8) {
 }
 
 func handle_set_put(r *http.Request, contents []uint8) {
-  //d := build_kvdata_array(contents)
+  d := build_kvdata_array(contents)
+  _, destinations := build_destination_list(d, "POST")
+
+  var wg sync.WaitGroup
+  wg.Add(len(destinations))
+  respChan := make(chan *http.Response)
+  resps := make([]*http.Response, 0)
+
+  for address, data := range destinations {
+    json_obj, _ := json.Marshal(data)
+    url := strings.Join([]string{"http://", address, r.URL.Path}, "")
+    response, err := http.NewRequest("POST", url, bytes.NewBuffer(json_obj))
+    if err != nil {
+      os.Exit(2)
+    } else {
+      go func(response *http.Request) {
+        defer response.Body.Close()
+        defer wg.Done()
+        response.Header.Set("Content-Type", "application/json")
+        client := &http.Client{}
+        resp_received, err := client.Do(response)
+        if err != nil {
+          panic(err)
+        } else {
+          respChan <- resp_received
+        }
+        time.Sleep(time.Second * 2)
+      }(response)
+
+      for _, d := range data {
+        addressBook[d.Key] = address
+      }
+    }
+  }
+
+  go func() {
+    for response := range respChan {
+      resps = append(resps, response)
+    }
+  }()
+  wg.Wait()
+  fmt.Println(resps)
 }
 
 func handle_get_get(r *http.Request, contents []uint8) {
@@ -247,6 +288,8 @@ func build_destination_list(d []KVData, mode string) (int, map[string][]KVData) 
       idx := rand.Int() % n_server
       address = ips[idx] + ":" + ports[idx]
     } else {
+      // TODO: Should check if it has the key already, if doesn't
+      // update code to 206
       address = addressBook[el.Key]
     }
     destinations[address] = append(destinations[address], temp)

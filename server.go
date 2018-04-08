@@ -41,12 +41,9 @@ type Queries struct {
 var dataStore = map[string]Value{}
 
 func handle_set(w http.ResponseWriter, r *http.Request, contents []uint8) {
-  switch r.Method {
-  case "POST":
-    d := json_to_object_post(contents)
-    save(d)
-    fmt.Println(dataStore)
-  }
+  d := json_to_object_post(contents)
+  save(d)
+  fmt.Println(dataStore)
 }
 
 func handle_get(w http.ResponseWriter, r *http.Request, contents []uint8) {
