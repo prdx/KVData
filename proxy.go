@@ -59,14 +59,109 @@ func request_handler(w http.ResponseWriter, r *http.Request) {
 }
 
 func handle_get(r *http.Request, contents []uint8) {
-  ks := Queries{}
-  err := json.Unmarshal(contents, &ks)
-
-  if err != nil {
-    fmt.Println("Error when extracting json")
-    fmt.Println(err)
-    os.Exit(1)
+  switch r.Method {
+  case "POST":
+    handle_get_post(r, contents)
+  case "GET":
+    handle_get_get(r, contents)
   }
+}
+
+func handle_set(r *http.Request, contents []uint8) {
+  switch r.Method {
+  case "POST":
+    handle_set_post(r, contents)
+  case "PUT":
+    handle_set_put(r, contents)
+  }
+}
+
+func handle_set_post(r *http.Request, contents []uint8) {
+  d := build_kvdata_array(contents)
+  destinations := build_destination_list(d)
+
+  var wg sync.WaitGroup
+  wg.Add(len(destinations))
+  respChan := make(chan *http.Response)
+  resps := make([]*http.Response, 0)
+
+  for i, destination := range destinations {
+    json_obj, _ := json.Marshal(destination)
+    url := strings.Join([]string{"http://", ips[i], ":", ports[i], r.URL.Path}, "")
+    response, err := http.NewRequest("POST", url, bytes.NewBuffer(json_obj))
+    if err != nil {
+      os.Exit(2)
+    } else {
+      go func(response *http.Request) {
+        defer response.Body.Close()
+        defer wg.Done()
+        response.Header.Set("Content-Type", "application/json")
+        client := &http.Client{}
+        resp_received, err := client.Do(response)
+        if err != nil {
+          panic(err)
+        } else {
+          respChan <- resp_received
+        }
+        time.Sleep(time.Second * 2)
+      }(response)
+
+      for _, d := range destination {
+        addressBook[d.Key] = ips[i] + ":" + ports[i]
+      }
+    }
+  }
+
+  go func() {
+    for response := range respChan {
+      resps = append(resps, response)
+    }
+  }()
+  wg.Wait()
+  fmt.Println(resps)
+}
+
+func handle_set_put(r *http.Request, contents []uint8) {
+}
+
+func handle_get_get(r *http.Request, contents []uint8) {
+  i := 0
+  var wg sync.WaitGroup
+  resps := make([]*http.Response, 0)
+  respChan := make(chan *http.Response)
+  wg.Add(len(ips))
+  for i < len(ips) {
+    url := strings.Join([]string{"http://", string(ips[i]), ":", string(ports[i]), r.URL.Path}, "")
+    response, err := http.NewRequest("GET", url, nil)
+    if err != nil {
+      os.Exit(2)
+    } else {
+      go func(response *http.Request) {
+        defer wg.Done()
+        response.Header.Set("Content-Type", "application/json")
+        client := &http.Client{}
+        resp_received, err := client.Do(response)
+        if err != nil {
+          panic(err)
+        } else {
+          respChan <- resp_received
+        }
+        time.Sleep(time.Second * 2)
+      }(response)
+    }
+    i++
+  }
+  go func() {
+    for response := range respChan {
+      resps = append(resps, response)
+    }
+  }()
+  wg.Wait()
+  fmt.Println(resps)
+}
+
+func handle_get_post(r *http.Request, contents []uint8) {
+  ks := build_queries_object(contents)
   json_obj, _ := json.Marshal(ks)
   i := 0
   var wg sync.WaitGroup
@@ -103,56 +198,19 @@ func handle_get(r *http.Request, contents []uint8) {
   fmt.Println(resps)
 }
 
-func handle_set(r *http.Request, contents []uint8) {
-  // Get number of servers
-  //n_server := len(ips)
+func build_queries_object(contents []uint8) (Queries) {
+  ks := Queries{}
+  err := json.Unmarshal(contents, &ks)
 
-  switch r.Method {
-  case "POST":
-    destinations := json_to_object(contents)
-    var wg sync.WaitGroup
-    wg.Add(len(destinations))
-    respChan := make(chan *http.Response)
-    resps := make([]*http.Response, 0)
-
-    for i, destination := range destinations {
-      json_obj, _ := json.Marshal(destination)
-      url := strings.Join([]string{"http://", ips[i], ":", ports[i], r.URL.Path}, "")
-      response, err := http.NewRequest("POST", url, bytes.NewBuffer(json_obj))
-      if err != nil {
-        os.Exit(2)
-      } else {
-        go func(response *http.Request) {
-          defer response.Body.Close()
-          defer wg.Done()
-          response.Header.Set("Content-Type", "application/json")
-          client := &http.Client{}
-          resp_received, err := client.Do(response)
-          if err != nil {
-            panic(err)
-          } else {
-            respChan <- resp_received
-          }
-          time.Sleep(time.Second * 2)
-        }(response)
-
-        for _, d := range destination {
-          addressBook[d.Key] = ips[i] + ":" + ports[i]
-        }
-      }
-    }
-
-    go func() {
-      for response := range respChan {
-        resps = append(resps, response)
-      }
-    }()
-    wg.Wait()
-    fmt.Println(resps)
+  if err != nil {
+    fmt.Println("Error when extracting json")
+    fmt.Println(err)
+    os.Exit(1)
   }
+  return ks
 }
 
-func json_to_object(contents []uint8) (map[int][]KVData) {
+func build_kvdata_array(contents []uint8) ([]KVData) {
   var d []KVData
   err := json.Unmarshal(contents, &d)
   if err != nil {
@@ -160,7 +218,10 @@ func json_to_object(contents []uint8) (map[int][]KVData) {
     fmt.Println(err)
     os.Exit(1)
   }
+  return d
+}
 
+func build_destination_list(d []KVData) (map[int][]KVData) {
   // Get number of servers
   n_server := len(ips)
 
