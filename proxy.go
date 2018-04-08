@@ -9,7 +9,7 @@ import (
   "math/rand"
   "net/http"
   "log"
-  _ "./status"
+  status "./status"
   "strings"
   "sync"
   "time"
@@ -78,16 +78,16 @@ func handle_set(r *http.Request, contents []uint8) {
 
 func handle_set_post(r *http.Request, contents []uint8) {
   d := build_kvdata_array(contents)
-  destinations := build_destination_list(d)
+  _, destinations := build_destination_list(d, "POST")
 
   var wg sync.WaitGroup
   wg.Add(len(destinations))
   respChan := make(chan *http.Response)
   resps := make([]*http.Response, 0)
 
-  for i, destination := range destinations {
-    json_obj, _ := json.Marshal(destination)
-    url := strings.Join([]string{"http://", ips[i], ":", ports[i], r.URL.Path}, "")
+  for address, data := range destinations {
+    json_obj, _ := json.Marshal(data)
+    url := strings.Join([]string{"http://", address, r.URL.Path}, "")
     response, err := http.NewRequest("POST", url, bytes.NewBuffer(json_obj))
     if err != nil {
       os.Exit(2)
@@ -106,8 +106,8 @@ func handle_set_post(r *http.Request, contents []uint8) {
         time.Sleep(time.Second * 2)
       }(response)
 
-      for _, d := range destination {
-        addressBook[d.Key] = ips[i] + ":" + ports[i]
+      for _, d := range data {
+        addressBook[d.Key] = address
       }
     }
   }
@@ -122,6 +122,7 @@ func handle_set_post(r *http.Request, contents []uint8) {
 }
 
 func handle_set_put(r *http.Request, contents []uint8) {
+  //d := build_kvdata_array(contents)
 }
 
 func handle_get_get(r *http.Request, contents []uint8) {
@@ -221,15 +222,16 @@ func build_kvdata_array(contents []uint8) ([]KVData) {
   return d
 }
 
-func build_destination_list(d []KVData) (map[int][]KVData) {
+func build_destination_list(d []KVData, mode string) (int, map[string][]KVData) {
   // Get number of servers
   n_server := len(ips)
-
   // Prepare the seed
   rand.Seed(time.Now().Unix())
-
   // Init the destinations
-  destinations := make(map[int][]KVData)
+  destinations := make(map[string][]KVData)
+  status_code := status.SUCCESS
+
+  var address string
 
   for _, el := range d {
     temp := KVData{
@@ -241,10 +243,15 @@ func build_destination_list(d []KVData) (map[int][]KVData) {
     }
     // Assign data to server randomly
     // Random is one of the method for load balancing
-    idx := rand.Int() % n_server
-    destinations[idx] = append(destinations[idx], temp)
+    if mode == "POST" {
+      idx := rand.Int() % n_server
+      address = ips[idx] + ":" + ports[idx]
+    } else {
+      address = addressBook[el.Key]
+    }
+    destinations[address] = append(destinations[address], temp)
   }
-  return destinations
+  return status_code, destinations
 }
 
 func is_duplicate(key string) bool {
