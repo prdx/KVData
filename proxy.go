@@ -29,8 +29,8 @@ type KVData struct {
   Value `json:"value"`
 }
 
-type Query struct {
-  Key string `json:"key"`
+type Queries struct {
+  Keys []string `json:"keys"`
 }
 
 type ResponseItem struct {
@@ -59,42 +59,48 @@ func request_handler(w http.ResponseWriter, r *http.Request) {
 }
 
 func handle_get(r *http.Request, contents []uint8) {
-  switch r.Method {
-  case "GET":
-    i := 0
-    var wg sync.WaitGroup 
-    resps := make([]*http.Response, 0)
-    respChan := make(chan *http.Response)
-    wg.Add(len(ips))
-    for i < len(ips) {
-      url := strings.Join([]string{"http://", string(ips[i]), ":", string(ports[i]), r.URL.Path}, "")
-      response, err := http.NewRequest("GET", url, nil)
-      if err != nil {
-        os.Exit(2)
-      } else {
-        go func(response *http.Request) {
-          defer wg.Done()
-          response.Header.Set("Content-Type", "application/json")
-          client := &http.Client{}
-          resp_received, err := client.Do(response)
-          if err != nil {
-            panic(err)
-          } else {
-            respChan <- resp_received
-          }
-          time.Sleep(time.Second * 2)
-        }(response)
-      }
-      i++
-    }
-    go func() {
-      for response := range respChan {
-        resps = append(resps, response)
-      }
-    }()
-    wg.Wait()
-    fmt.Println(resps)
+  ks := Queries{}
+  err := json.Unmarshal(contents, &ks)
+
+  if err != nil {
+    fmt.Println("Error when extracting json")
+    fmt.Println(err)
+    os.Exit(1)
   }
+  json_obj, _ := json.Marshal(ks)
+  i := 0
+  var wg sync.WaitGroup
+  resps := make([]*http.Response, 0)
+  respChan := make(chan *http.Response)
+  wg.Add(len(ips))
+  for i < len(ips) {
+    url := strings.Join([]string{"http://", string(ips[i]), ":", string(ports[i]), r.URL.Path}, "")
+    response, err := http.NewRequest(r.Method, url, bytes.NewBuffer(json_obj))
+    if err != nil {
+      os.Exit(2)
+    } else {
+      go func(response *http.Request) {
+        defer wg.Done()
+        response.Header.Set("Content-Type", "application/json")
+        client := &http.Client{}
+        resp_received, err := client.Do(response)
+        if err != nil {
+          panic(err)
+        } else {
+          respChan <- resp_received
+        }
+        time.Sleep(time.Second * 2)
+      }(response)
+    }
+    i++
+  }
+  go func() {
+    for response := range respChan {
+      resps = append(resps, response)
+    }
+  }()
+  wg.Wait()
+  fmt.Println(resps)
 }
 
 func handle_set(r *http.Request, contents []uint8) {

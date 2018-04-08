@@ -8,7 +8,7 @@ import (
   "net/http"
   "os"
   "log"
-  _ "./status"
+  status "./status"
 )
 
 
@@ -34,6 +34,10 @@ type KVData struct {
   Value `json:"value"`
 }
 
+type Queries struct {
+  Keys []string `json:"keys"`
+}
+
 var dataStore = map[string]Value{}
 
 func handle_set(w http.ResponseWriter, r *http.Request, contents []uint8) {
@@ -56,7 +60,35 @@ func handle_get(w http.ResponseWriter, r *http.Request, contents []uint8) {
 
     w.Header().Set("Content-Type", "application/json")
     w.Write(js)
+  case "POST":
+    ks := Queries{}
+    err := json.Unmarshal(contents, &ks)
+    fmt.Println(ks)
+    search(ks)
+    if err != nil {
+      http.Error(w, err.Error(), http.StatusInternalServerError)
+      return
+    }
+
   }
+}
+
+func search(ks Queries) (int, []KVData) {
+  res := []KVData{}
+  code := status.SUCCESS
+
+  for _, k := range ks.Keys {
+    if val, ok := dataStore[k]; ok {
+      temp := KVData {
+        Key: k,
+        Value: val,
+      }
+      res = append(res, temp)
+    } else {
+      code = status.PARTIAL_SUCCESS
+    }
+  }
+  return code, res
 }
 
 func json_to_object_post(contents []uint8) ([]KVData) {
