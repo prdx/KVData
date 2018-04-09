@@ -37,6 +37,11 @@ type Queries struct {
 	Keys []string `json:"keys"`
 }
 
+type ErrorResponse struct {
+	RCode    int
+	RMessage string
+}
+
 var dataStore = map[string]Value{}
 
 func handle_set(w http.ResponseWriter, r *http.Request, contents []uint8) {
@@ -48,25 +53,38 @@ func handle_set(w http.ResponseWriter, r *http.Request, contents []uint8) {
 func handle_get(w http.ResponseWriter, r *http.Request, contents []uint8) {
 	switch r.Method {
 	case "GET":
-		js, err := json.Marshal(dataStore)
+        d := build_kvdata_array_from_store()
+		js, err := json.Marshal(d)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
 		w.Header().Set("Content-Type", "application/json")
+        w.WriteHeader(http.StatusOK)
 		w.Write(js)
 	case "POST":
 		ks := Queries{}
 		err := json.Unmarshal(contents, &ks)
-		fmt.Println(ks)
-		search(ks)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-
+		fmt.Println(ks)
+		search(ks)
 	}
+}
+
+func build_kvdata_array_from_store() []KVData {
+  var d []KVData
+  for key, value := range dataStore {
+    temp := KVData {
+      Key: key,
+      Value: value,
+    }
+    d = append(d, temp)
+  }
+  return d
 }
 
 func search(ks Queries) (int, []KVData) {
@@ -81,7 +99,7 @@ func search(ks Queries) (int, []KVData) {
 			}
 			res = append(res, temp)
 		} else {
-			code = status.PARTIAL_SUCCESS
+			code = http.StatusPartialContent
 		}
 	}
 	return code, res
@@ -102,6 +120,23 @@ func save(d []KVData) {
 	for _, el := range d {
 		dataStore[el.Key] = el.Value
 	}
+}
+
+func handle_response(w http.ResponseWriter, reply []byte, code int) {
+  w.Header().Set("Content-Type", "application/json")
+  w.WriteHeader(code)
+  w.Write(reply)
+}
+
+func error_handler(w http.ResponseWriter, e *ErrorResponse) {
+	resp, error := json.Marshal(e)
+	if error != nil {
+		http.Error(w, error.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(e.RCode)
+	w.Write(resp)
 }
 
 func main() {

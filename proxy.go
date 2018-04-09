@@ -33,14 +33,9 @@ type Queries struct {
 	Keys []string `json:"keys"`
 }
 
-type ResponseItem struct {
-	Key      string `json:"key"`
-	Encoding string `json:"encoding"`
-}
-
-type Response struct {
-	Status int
-	Items  []ResponseItem `json:items`
+type ErrorResponse struct {
+	RCode    int
+	RMessage string
 }
 
 // To maintain where each value is stored in each server
@@ -52,31 +47,31 @@ func request_handler(w http.ResponseWriter, r *http.Request) {
 	contents, _ := ioutil.ReadAll(r.Body)
 	switch r.URL.Path {
 	case "/set":
-		handle_set(r, contents)
+		handle_set(w, r, contents)
 	case "/get":
-		handle_get(r, contents)
+		handle_get(w, r, contents)
 	}
 }
 
-func handle_get(r *http.Request, contents []uint8) {
+func handle_get(w http.ResponseWriter, r *http.Request, contents []uint8) {
 	switch r.Method {
 	case "POST":
-		handle_get_post(r, contents)
+		handle_get_post(w, r, contents)
 	case "GET":
-		handle_get_get(r, contents)
+		handle_get_get(w, r, contents)
 	}
 }
 
-func handle_set(r *http.Request, contents []uint8) {
+func handle_set(w http.ResponseWriter, r *http.Request, contents []uint8) {
 	switch r.Method {
 	case "POST":
-		handle_set_post(r, contents)
+		handle_set_post(w, r, contents)
 	case "PUT":
-		handle_set_put(r, contents)
+		handle_set_put(w, r, contents)
 	}
 }
 
-func handle_set_post(r *http.Request, contents []uint8) {
+func handle_set_post(w http.ResponseWriter, r *http.Request, contents []uint8) {
 	d := build_kvdata_array(contents)
 	_, destinations := build_destination_list(d, "POST")
 
@@ -121,7 +116,7 @@ func handle_set_post(r *http.Request, contents []uint8) {
 	fmt.Println(resps)
 }
 
-func handle_set_put(r *http.Request, contents []uint8) {
+func handle_set_put(w http.ResponseWriter, r *http.Request, contents []uint8) {
 	d := build_kvdata_array(contents)
 	_, destinations := build_destination_list(d, "PUT")
 
@@ -166,7 +161,7 @@ func handle_set_put(r *http.Request, contents []uint8) {
 	fmt.Println(resps)
 }
 
-func handle_get_get(r *http.Request, contents []uint8) {
+func handle_get_get(w http.ResponseWriter, r *http.Request, contents []uint8) {
 	i := 0
 	var wg sync.WaitGroup
 	resps := make([]*http.Response, 0)
@@ -198,11 +193,12 @@ func handle_get_get(r *http.Request, contents []uint8) {
 			resps = append(resps, response)
 		}
 	}()
-	wg.Wait()
-	fmt.Println(resps)
+    wg.Wait()
+    send_message, r_code := format_get_response(resps)
+    handle_response(w, send_message, r_code)
 }
 
-func handle_get_post(r *http.Request, contents []uint8) {
+func handle_get_post(w http.ResponseWriter, r *http.Request, contents []uint8) {
 	ks := build_queries_object(contents)
 	json_obj, _ := json.Marshal(ks)
 	i := 0
@@ -237,7 +233,8 @@ func handle_get_post(r *http.Request, contents []uint8) {
 		}
 	}()
 	wg.Wait()
-	fmt.Println(resps)
+    send_message, r_code := format_get_response(resps)
+    handle_response(w, send_message, r_code)
 }
 
 func build_queries_object(contents []uint8) Queries {
@@ -309,8 +306,31 @@ func key_exists(key string) bool {
 	return false
 }
 
-//func format_response(response []*http.Response) (byte[], int) {
-//}
+func format_get_response(responses []*http.Response) ([]byte, int) {
+  output := make([]KVData, 0)
+  code := http.StatusOK
+
+  for _, response := range responses {
+    if response.StatusCode >= http.StatusOK {
+      body, error := ioutil.ReadAll(response.Body)
+      if error != nil {
+        log.Fatal(error)
+      }
+      var back_response []KVData
+      json.Unmarshal(body, &back_response)
+      output = append(output, back_response...)
+    } else {
+      code = http.StatusOK
+    }
+    response.Body.Close()
+  }
+  fmt.Println(output)
+  body, err := json.Marshal(output)
+  if err != nil {
+    return nil, http.StatusInternalServerError
+  }
+  return body, code
+}
 
 func build_addresses(servers []string) ([]string, []string) {
 	ips := make([]string, len(servers))
@@ -323,6 +343,24 @@ func build_addresses(servers []string) ([]string, []string) {
 	}
 
 	return ips, ports
+}
+
+func handle_response(w http.ResponseWriter, reply []byte, code int) {
+  w.Header().Set("Content-Type", "application/json")
+  w.WriteHeader(code)
+  w.Write(reply)
+}
+
+
+func error_handler(w http.ResponseWriter, e *ErrorResponse) {
+  resp, error := json.Marshal(e)
+  if error != nil {
+    http.Error(w, error.Error(), http.StatusInternalServerError)
+    return
+  }
+  w.Header().Set("Content-Type", "application/json")
+  w.WriteHeader(e.RCode)
+  w.Write(resp)
 }
 
 func main() {
