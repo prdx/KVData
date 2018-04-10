@@ -44,9 +44,34 @@ type ErrorResponse struct {
 var dataStore = map[string]Value{}
 
 func handle_set(w http.ResponseWriter, r *http.Request, contents []uint8) {
-	d := json_to_object_post(contents)
-	save(d)
-	fmt.Println(dataStore)
+    switch r.Method {
+    case "POST":
+      d := json_to_object_post(contents)
+      save(d)
+      keys := kvdata_to_queries(d)
+      js, err := json.Marshal(keys)
+      if err != nil {
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+        return
+      }
+
+      w.Header().Set("Content-Type", "application/json")
+      w.WriteHeader(http.StatusOK)
+      w.Write(js)
+
+    case "PUT":
+      d := json_to_object_post(contents)
+      q := update(d)
+      js, err := json.Marshal(q)
+      if err != nil {
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+        return
+      }
+
+      w.Header().Set("Content-Type", "application/json")
+      w.WriteHeader(http.StatusOK)
+      w.Write(js)
+    }
 }
 
 func handle_get(w http.ResponseWriter, r *http.Request, contents []uint8) {
@@ -69,7 +94,7 @@ func handle_get(w http.ResponseWriter, r *http.Request, contents []uint8) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		fmt.Println(ks)
+
         status, d := search(ks)
 		js, err := json.Marshal(d)
 		if err != nil {
@@ -92,6 +117,14 @@ func build_kvdata_array_from_store() []KVData {
     d = append(d, temp)
   }
   return d
+}
+
+func kvdata_to_queries(data []KVData) Queries {
+  q := Queries{}
+  for _, d := range data {
+    q.Keys = append(q.Keys, d.Key)
+  }
+  return q
 }
 
 func search(ks Queries) (int, []KVData) {
@@ -127,6 +160,23 @@ func save(d []KVData) {
 	for _, el := range d {
 		dataStore[el.Key] = el.Value
 	}
+}
+
+func update(d []KVData) Queries {
+  q := Queries{}
+  for _, el := range d {
+    if key_exists(el.Key) {
+      q.Keys = append(q.Keys, el.Key)
+    }
+  }
+  return q
+}
+
+func key_exists(key string) bool {
+	if _, ok := dataStore[key]; ok {
+		return true
+	}
+	return false
 }
 
 func handle_response(w http.ResponseWriter, reply []byte, code int) {

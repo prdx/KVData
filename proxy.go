@@ -52,6 +52,7 @@ func request_handler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// Handle /get
 func handle_get(w http.ResponseWriter, r *http.Request, contents []uint8) {
 	switch r.Method {
 	case "POST":
@@ -61,6 +62,7 @@ func handle_get(w http.ResponseWriter, r *http.Request, contents []uint8) {
 	}
 }
 
+// Handle /set
 func handle_set(w http.ResponseWriter, r *http.Request, contents []uint8) {
 	switch r.Method {
 	case "POST":
@@ -113,7 +115,8 @@ func handle_set_post(w http.ResponseWriter, r *http.Request, contents []uint8) {
 		}
 	}()
 	wg.Wait()
-	fmt.Println(resps)
+    send_message, r_code := format_set_response(resps, len(d))
+    handle_response(w, send_message, r_code)
 }
 
 // Handle PUT /set
@@ -159,7 +162,8 @@ func handle_set_put(w http.ResponseWriter, r *http.Request, contents []uint8) {
 		}
 	}()
 	wg.Wait()
-	fmt.Println(resps)
+    send_message, r_code := format_set_response(resps, len(d))
+    handle_response(w, send_message, r_code)
 }
 
 // Handle GET /get
@@ -307,6 +311,35 @@ func key_exists(key string) bool {
 		return true
 	}
 	return false
+}
+
+func format_set_response(responses []*http.Response, length int) ([]byte, int) {
+  output := Queries{}
+  code := http.StatusOK
+
+  for _, response := range responses {
+    if response.StatusCode >= http.StatusOK {
+      body, error := ioutil.ReadAll(response.Body)
+      if error != nil {
+        log.Fatal(error)
+      }
+      var back_response Queries
+      json.Unmarshal(body, &back_response)
+      output = back_response
+    } else {
+      code = http.StatusOK
+    }
+    response.Body.Close()
+  }
+  fmt.Println(output)
+  if len(output.Keys) < length {
+    code = http.StatusPartialContent
+  }
+  body, err := json.Marshal(output)
+  if err != nil {
+    return nil, http.StatusInternalServerError
+  }
+  return body, code
 }
 
 func format_get_response(responses []*http.Response) ([]byte, int) {
