@@ -1,7 +1,6 @@
 package main
 
 import (
-	status "./status"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -71,6 +70,7 @@ func handle_set(w http.ResponseWriter, r *http.Request, contents []uint8) {
 	}
 }
 
+// Handle POST /set
 func handle_set_post(w http.ResponseWriter, r *http.Request, contents []uint8) {
 	d := build_kvdata_array(contents)
 	_, destinations := build_destination_list(d, "POST")
@@ -116,6 +116,7 @@ func handle_set_post(w http.ResponseWriter, r *http.Request, contents []uint8) {
 	fmt.Println(resps)
 }
 
+// Handle PUT /set
 func handle_set_put(w http.ResponseWriter, r *http.Request, contents []uint8) {
 	d := build_kvdata_array(contents)
 	_, destinations := build_destination_list(d, "PUT")
@@ -161,6 +162,7 @@ func handle_set_put(w http.ResponseWriter, r *http.Request, contents []uint8) {
 	fmt.Println(resps)
 }
 
+// Handle GET /get
 func handle_get_get(w http.ResponseWriter, r *http.Request, contents []uint8) {
 	i := 0
 	var wg sync.WaitGroup
@@ -198,6 +200,7 @@ func handle_get_get(w http.ResponseWriter, r *http.Request, contents []uint8) {
     handle_response(w, send_message, r_code)
 }
 
+// Handle POST /get
 func handle_get_post(w http.ResponseWriter, r *http.Request, contents []uint8) {
 	ks := build_queries_object(contents)
 	json_obj, _ := json.Marshal(ks)
@@ -267,7 +270,7 @@ func build_destination_list(d []KVData, mode string) (int, map[string][]KVData) 
 	rand.Seed(time.Now().Unix())
 	// Init the destinations
 	destinations := make(map[string][]KVData)
-	status_code := status.SUCCESS
+	status_code := http.StatusOK
 
 	var address string
 
@@ -290,7 +293,7 @@ func build_destination_list(d []KVData, mode string) (int, map[string][]KVData) 
 			if key_exists(el.Key) {
 				address = addressBook[el.Key]
 			} else {
-				status_code = status.PARTIAL_SUCCESS
+				status_code = http.StatusPartialContent
 				continue
 			}
 		}

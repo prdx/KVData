@@ -1,7 +1,6 @@
 package main
 
 import (
-	status "./status"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -97,7 +96,7 @@ func build_kvdata_array_from_store() []KVData {
 
 func search(ks Queries) (int, []KVData) {
 	res := []KVData{}
-	code := status.SUCCESS
+	code := http.StatusOK
 
 	for _, k := range ks.Keys {
 		if val, ok := dataStore[k]; ok {
