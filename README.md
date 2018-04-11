@@ -1,6 +1,6 @@
 # About
 
-Very naive and implementation of distributed key value database in GO.
+Very naive and simple implementation of distributed key value database in GO. Created in purpose of learning Golang and system design.
 
 # How to run
 
@@ -10,3 +10,9 @@ Very naive and implementation of distributed key value database in GO.
 # Load balancing design
 
 Data assigned at random server and then stored in a struct called `addressBook` on the proxy.
+
+# TODO
+
+1. Reduce redundancy in the code
+2. Create unit testing
+3. Implement replication
